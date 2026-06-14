@@ -23,6 +23,21 @@ management:
       probes:
         enabled: true
 
+app:
+  sqs:
+    account-opening:
+      enabled: false
+      endpoint: http://localhost:4566
+      region: sa-east-1
+      queue-name: conta-bancaria-criada
+      queue-url: http://localhost:4566/000000000000/conta-bancaria-criada
+      access-key-id: test
+      secret-access-key: test
+      max-messages: 10
+      wait-time-seconds: 10
+      visibility-timeout-seconds: 30
+      poll-delay-ms: 1000
+
 ---
 spring:
   config:
@@ -37,6 +52,11 @@ spring:
 server:
   port: 8080
 
+app:
+  sqs:
+    account-opening:
+      enabled: true
+
 ---
 spring:
   config:
@@ -49,3 +69,8 @@ spring:
 
 server:
   port: 0
+
+app:
+  sqs:
+    account-opening:
+      enabled: false
