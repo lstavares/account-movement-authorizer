@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 @Service
 class AuthorizeTransactionService(
@@ -57,8 +58,12 @@ class TransactionAuthorizationWriter(
             return it.toResultFor(command)
         }
 
-        val now = OffsetDateTime.now(transactionZone)
+        val now = currentTimestamp()
         val account = accountRepository.findByIdForUpdate(command.accountId)
+
+        transactionRepository.findById(command.transactionId).orElse(null)?.let {
+            return it.toResultFor(command)
+        }
 
         if (account == null) {
             val transaction = saveFailedTransaction(
@@ -231,6 +236,8 @@ class TransactionAuthorizationWriter(
                 createdAt = now,
             ),
         )
+        private fun currentTimestamp(): OffsetDateTime =
+            OffsetDateTime.now(transactionZone).truncatedTo(ChronoUnit.MICROS)
 }
 
 private fun TransactionEntity.toResultFor(command: AuthorizeTransactionCommand): AuthorizeTransactionResult {

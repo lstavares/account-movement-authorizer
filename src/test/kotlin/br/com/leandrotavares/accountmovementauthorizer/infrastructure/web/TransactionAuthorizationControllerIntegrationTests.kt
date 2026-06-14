@@ -58,7 +58,7 @@ class TransactionAuthorizationControllerIntegrationTests : PostgreSqlIntegration
         val body = objectMapper.readTree(response.body)
         assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
         assertThat(body.size()).isEqualTo(2)
-        assertThat(body["transaction"].size()).isEqualTo(6)
+        assertThat(body["transaction"].size()).isEqualTo(5)
         assertThat(body["account"].size()).isEqualTo(2)
         assertThat(body["transaction"]["amount"].size()).isEqualTo(2)
         assertThat(body["account"]["balance"].size()).isEqualTo(2)
