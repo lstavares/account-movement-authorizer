@@ -1,0 +1,14 @@
+.git
+.github
+.gradle
+.idea
+.vscode
+.kotlin
+build
+docs
+*.iml
+*.log
+*.pdf
+hs_err_pid*
+replay_pid*
+README.md

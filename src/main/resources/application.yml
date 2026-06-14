@@ -17,11 +17,23 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+  info:
+    env:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: Account movement authorization service
+    version: ${APP_VERSION:0.0.1-SNAPSHOT}
 
 app:
   sqs:

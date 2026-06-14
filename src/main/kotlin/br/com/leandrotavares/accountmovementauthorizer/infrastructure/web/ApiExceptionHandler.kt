@@ -2,6 +2,7 @@ package br.com.leandrotavares.accountmovementauthorizer.infrastructure.web
 
 import br.com.leandrotavares.accountmovementauthorizer.application.transactionauthorization.IdempotencyConflictException
 import br.com.leandrotavares.accountmovementauthorizer.application.transactionauthorization.InvalidMoneyAmountException
+import io.swagger.v3.oas.annotations.media.Schema
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
@@ -34,7 +35,10 @@ class ApiExceptionHandler {
             )
 }
 
+@Schema(description = "Error response")
 data class ApiErrorResponse(
+    @field:Schema(description = "Stable error code", example = "BAD_REQUEST")
     val error: String,
+    @field:Schema(description = "Human-readable error message", example = "transaction.amount.currency must be BRL")
     val message: String,
 )

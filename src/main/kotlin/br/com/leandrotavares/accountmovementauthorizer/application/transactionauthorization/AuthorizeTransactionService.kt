@@ -25,21 +25,63 @@ class AuthorizeTransactionService(
     private val logger = LoggerFactory.getLogger(javaClass)
 
     fun authorize(command: AuthorizeTransactionCommand): AuthorizeTransactionResult {
-        transactionRepository.findById(command.transactionId).orElse(null)?.let {
-            return it.toResultFor(command)
+        transactionRepository.findById(command.transactionId).orElse(null)?.let { existingTransaction ->
+            if (!existingTransaction.matches(command)) {
+                logger.info(
+                    "Transaction idempotency conflict detected. transactionId={} accountId={} type={} idempotencyResult={}",
+                    command.transactionId,
+                    command.accountId,
+                    command.type,
+                    "CONFLICT",
+                )
+            }
+
+            return existingTransaction.toResultFor(command).also { result ->
+                logger.info(
+                    "Transaction idempotency replay accepted. transactionId={} accountId={} type={} status={} failureReason={} idempotencyResult={}",
+                    result.transactionId,
+                    result.accountId,
+                    result.type,
+                    result.status,
+                    result.failureReason ?: "NONE",
+                    "REPLAYED",
+                )
+            }
         }
 
         return try {
             transactionAuthorizationWriter.authorize(command)
         } catch (ex: DataIntegrityViolationException) {
             logger.info(
-                "Transaction already persisted by a concurrent process. transactionId={} accountId={}",
+                "Transaction already persisted by a concurrent process. transactionId={} accountId={} type={} idempotencyResult={}",
                 command.transactionId,
                 command.accountId,
+                command.type,
+                "CONCURRENT_DUPLICATE",
             )
 
             val existingTransaction = transactionRepository.findById(command.transactionId).orElseThrow { ex }
-            existingTransaction.toResultFor(command)
+            if (!existingTransaction.matches(command)) {
+                logger.info(
+                    "Transaction idempotency conflict detected after concurrent insert. transactionId={} accountId={} type={} idempotencyResult={}",
+                    command.transactionId,
+                    command.accountId,
+                    command.type,
+                    "CONFLICT",
+                )
+            }
+
+            existingTransaction.toResultFor(command).also { result ->
+                logger.info(
+                    "Transaction concurrent idempotency replay accepted. transactionId={} accountId={} type={} status={} failureReason={} idempotencyResult={}",
+                    result.transactionId,
+                    result.accountId,
+                    result.type,
+                    result.status,
+                    result.failureReason ?: "NONE",
+                    "CONCURRENT_REPLAYED",
+                )
+            }
         }
     }
 }
@@ -54,15 +96,35 @@ class TransactionAuthorizationWriter(
 
     @Transactional
     fun authorize(command: AuthorizeTransactionCommand): AuthorizeTransactionResult {
-        transactionRepository.findById(command.transactionId).orElse(null)?.let {
-            return it.toResultFor(command)
+        transactionRepository.findById(command.transactionId).orElse(null)?.let { existingTransaction ->
+            return existingTransaction.toResultFor(command).also { result ->
+                logger.info(
+                    "Transaction idempotency replay accepted inside authorization transaction. transactionId={} accountId={} type={} status={} failureReason={} idempotencyResult={}",
+                    result.transactionId,
+                    result.accountId,
+                    result.type,
+                    result.status,
+                    result.failureReason ?: "NONE",
+                    "REPLAYED",
+                )
+            }
         }
 
         val now = currentTimestamp()
         val account = accountRepository.findByIdForUpdate(command.accountId)
 
-        transactionRepository.findById(command.transactionId).orElse(null)?.let {
-            return it.toResultFor(command)
+        transactionRepository.findById(command.transactionId).orElse(null)?.let { existingTransaction ->
+            return existingTransaction.toResultFor(command).also { result ->
+                logger.info(
+                    "Transaction idempotency replay accepted after account lock. transactionId={} accountId={} type={} status={} failureReason={} idempotencyResult={}",
+                    result.transactionId,
+                    result.accountId,
+                    result.type,
+                    result.status,
+                    result.failureReason ?: "NONE",
+                    "REPLAYED_AFTER_LOCK",
+                )
+            }
         }
 
         if (account == null) {
@@ -75,9 +137,12 @@ class TransactionAuthorizationWriter(
             )
 
             logger.info(
-                "Transaction authorization failed because account was not found. transactionId={} accountId={}",
+                "Transaction authorization finished. transactionId={} accountId={} type={} status={} failureReason={}",
                 command.transactionId,
                 command.accountId,
+                command.type,
+                TransactionStatus.FAILED,
+                FailureReason.ACCOUNT_NOT_FOUND,
             )
 
             return transaction.toResult(accountBalanceAmount = 0, accountBalanceCurrency = command.amountCurrency)
@@ -95,9 +160,12 @@ class TransactionAuthorizationWriter(
             )
 
             logger.info(
-                "Transaction authorization failed because account is disabled. transactionId={} accountId={}",
+                "Transaction authorization finished. transactionId={} accountId={} type={} status={} failureReason={}",
                 command.transactionId,
                 command.accountId,
+                command.type,
+                TransactionStatus.FAILED,
+                FailureReason.ACCOUNT_DISABLED,
             )
 
             return transaction.toResult(
@@ -131,9 +199,12 @@ class TransactionAuthorizationWriter(
         )
 
         logger.info(
-            "Credit transaction authorized. transactionId={} accountId={}",
+            "Transaction authorization finished. transactionId={} accountId={} type={} status={} failureReason={}",
             command.transactionId,
             command.accountId,
+            command.type,
+            TransactionStatus.SUCCEEDED,
+            "NONE",
         )
 
         return transaction.toResult(
@@ -158,9 +229,12 @@ class TransactionAuthorizationWriter(
             )
 
             logger.info(
-                "Debit transaction rejected because account has insufficient funds. transactionId={} accountId={}",
+                "Transaction authorization finished. transactionId={} accountId={} type={} status={} failureReason={}",
                 command.transactionId,
                 command.accountId,
+                command.type,
+                TransactionStatus.FAILED,
+                FailureReason.INSUFFICIENT_FUNDS,
             )
 
             return transaction.toResult(
@@ -181,9 +255,12 @@ class TransactionAuthorizationWriter(
         )
 
         logger.info(
-            "Debit transaction authorized. transactionId={} accountId={}",
+            "Transaction authorization finished. transactionId={} accountId={} type={} status={} failureReason={}",
             command.transactionId,
             command.accountId,
+            command.type,
+            TransactionStatus.SUCCEEDED,
+            "NONE",
         )
 
         return transaction.toResult(
@@ -236,8 +313,9 @@ class TransactionAuthorizationWriter(
                 createdAt = now,
             ),
         )
-        private fun currentTimestamp(): OffsetDateTime =
-            OffsetDateTime.now(transactionZone).truncatedTo(ChronoUnit.MICROS)
+
+    private fun currentTimestamp(): OffsetDateTime =
+        OffsetDateTime.now(transactionZone).truncatedTo(ChronoUnit.MICROS)
 }
 
 private fun TransactionEntity.toResultFor(command: AuthorizeTransactionCommand): AuthorizeTransactionResult {

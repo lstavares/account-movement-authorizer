@@ -66,24 +66,27 @@ class AccountOpeningSqsPoller(
 
             val result = registerOpenedAccountService.register(command)
             logger.info(
-                "Account opening message processed. messageId={} accountId={} result={}",
+                "Account opening message processed. messageId={} accountId={} result={} queueName={}",
                 messageId,
                 accountId,
                 result,
+                properties.queueName,
             )
 
             deleteMessage(message, accountId, result)
         } catch (ex: InvalidAccountOpeningMessageException) {
             logger.error(
-                "Invalid account opening message. messageId={}. Message will not be deleted.",
+                "Invalid account opening message. messageId={} queueName={}. Message will not be deleted.",
                 messageId,
+                properties.queueName,
                 ex,
             )
         } catch (ex: Exception) {
             logger.error(
-                "Failed to process account opening message. messageId={} accountId={}. Message will not be deleted.",
+                "Failed to process account opening message. messageId={} accountId={} queueName={}. Message will not be deleted.",
                 messageId,
                 accountId,
+                properties.queueName,
                 ex,
             )
         }
@@ -97,10 +100,11 @@ class AccountOpeningSqsPoller(
         val receiptHandle = message.receiptHandle()
         if (receiptHandle.isNullOrBlank()) {
             logger.error(
-                "Cannot delete account opening message without receipt handle. messageId={} accountId={} result={}",
+                "Cannot delete account opening message without receipt handle. messageId={} accountId={} result={} queueName={}",
                 message.messageId(),
                 accountId,
                 result,
+                properties.queueName,
             )
             return
         }
@@ -113,17 +117,19 @@ class AccountOpeningSqsPoller(
                     .build(),
             )
             logger.info(
-                "Account opening message deleted. messageId={} accountId={} result={}",
+                "Account opening message deleted. messageId={} accountId={} result={} queueName={}",
                 message.messageId(),
                 accountId,
                 result,
+                properties.queueName,
             )
         } catch (ex: Exception) {
             logger.error(
-                "Failed to delete account opening message. messageId={} accountId={} result={}",
+                "Failed to delete account opening message. messageId={} accountId={} result={} queueName={}",
                 message.messageId(),
                 accountId,
                 result,
+                properties.queueName,
                 ex,
             )
         }

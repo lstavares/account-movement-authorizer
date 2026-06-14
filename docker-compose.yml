@@ -38,6 +38,38 @@ services:
       retries: 5
       start_period: 15s
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: account-movement-authorizer:local
+    container_name: account-movement-authorizer
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/account_authorizer
+      - SPRING_DATASOURCE_USERNAME=account_authorizer
+      - SPRING_DATASOURCE_PASSWORD=account_authorizer
+      - APP_SQS_ACCOUNT_OPENING_ENDPOINT=http://localstack:4566
+      - APP_SQS_ACCOUNT_OPENING_REGION=sa-east-1
+      - APP_SQS_ACCOUNT_OPENING_QUEUE_NAME=conta-bancaria-criada
+      - APP_SQS_ACCOUNT_OPENING_QUEUE_URL=http://localstack:4566/000000000000/conta-bancaria-criada
+      - APP_SQS_ACCOUNT_OPENING_ACCESS_KEY_ID=test
+      - APP_SQS_ACCOUNT_OPENING_SECRET_ACCESS_KEY=test
+      - APP_VERSION=local
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   message-generator:
     image: golang:1.24.3
     container_name: message-generator
