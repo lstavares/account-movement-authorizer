@@ -4,9 +4,7 @@ import br.com.leandrotavares.accountmovementauthorizer.application.accountopenin
 import br.com.leandrotavares.accountmovementauthorizer.application.accountopening.RegisterOpenedAccountResult
 import br.com.leandrotavares.accountmovementauthorizer.application.accountopening.RegisterOpenedAccountService
 import br.com.leandrotavares.accountmovementauthorizer.domain.AccountStatus
-import io.mockk.any
 import io.mockk.every
-import io.mockk.match
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.Test
