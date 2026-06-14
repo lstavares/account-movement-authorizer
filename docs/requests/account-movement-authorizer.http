@@ -1,0 +1,170 @@
+@baseUrl = http://localhost:8080
+
+# Accounts are created indirectly from SQS messages.
+# Local flow:
+# 1. Start infrastructure and app.
+# 2. Run: docker compose --profile seed up message-generator
+# 3. Pick an account id from PostgreSQL:
+#    docker exec -it account-authorizer-postgres psql -U account_authorizer -d account_authorizer -c "select id, balance_amount, status from accounts limit 5;"
+@accountId = 00000000-0000-0000-0000-000000000001
+
+### Healthcheck
+GET {{baseUrl}}/actuator/health
+
+### OpenAPI document
+GET {{baseUrl}}/v3/api-docs
+
+### CREDIT with success
+POST {{baseUrl}}/transactions/{{$guid}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "{{accountId}}"
+  },
+  "transaction": {
+    "type": "CREDIT",
+    "amount": {
+      "value": 97.07,
+      "currency": "BRL"
+    }
+  }
+}
+
+### DEBIT with success
+POST {{baseUrl}}/transactions/{{$guid}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "{{accountId}}"
+  },
+  "transaction": {
+    "type": "DEBIT",
+    "amount": {
+      "value": 25.00,
+      "currency": "BRL"
+    }
+  }
+}
+
+### DEBIT with insufficient funds
+POST {{baseUrl}}/transactions/{{$guid}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "{{accountId}}"
+  },
+  "transaction": {
+    "type": "DEBIT",
+    "amount": {
+      "value": 999999.99,
+      "currency": "BRL"
+    }
+  }
+}
+
+### Nonexistent account
+POST {{baseUrl}}/transactions/{{$guid}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "11111111-1111-1111-1111-111111111111"
+  },
+  "transaction": {
+    "type": "CREDIT",
+    "amount": {
+      "value": 10.00,
+      "currency": "BRL"
+    }
+  }
+}
+
+### Idempotency with same transactionId and same payload
+@idempotentTransactionId = 22222222-2222-2222-2222-222222222222
+
+POST {{baseUrl}}/transactions/{{idempotentTransactionId}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "{{accountId}}"
+  },
+  "transaction": {
+    "type": "CREDIT",
+    "amount": {
+      "value": 1.23,
+      "currency": "BRL"
+    }
+  }
+}
+
+### Replay same idempotent request
+POST {{baseUrl}}/transactions/{{idempotentTransactionId}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "{{accountId}}"
+  },
+  "transaction": {
+    "type": "CREDIT",
+    "amount": {
+      "value": 1.23,
+      "currency": "BRL"
+    }
+  }
+}
+
+### Idempotency conflict with same transactionId and different payload
+POST {{baseUrl}}/transactions/{{idempotentTransactionId}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "{{accountId}}"
+  },
+  "transaction": {
+    "type": "DEBIT",
+    "amount": {
+      "value": 1.23,
+      "currency": "BRL"
+    }
+  }
+}
+
+### Invalid currency
+POST {{baseUrl}}/transactions/{{$guid}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "{{accountId}}"
+  },
+  "transaction": {
+    "type": "CREDIT",
+    "amount": {
+      "value": 10.00,
+      "currency": "USD"
+    }
+  }
+}
+
+### Invalid amount
+POST {{baseUrl}}/transactions/{{$guid}}
+Content-Type: application/json
+
+{
+  "account": {
+    "id": "{{accountId}}"
+  },
+  "transaction": {
+    "type": "CREDIT",
+    "amount": {
+      "value": 0,
+      "currency": "BRL"
+    }
+  }
+}
