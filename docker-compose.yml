@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: account-authorizer-postgres
+    environment:
+      - POSTGRES_DB=account_authorizer
+      - POSTGRES_USER=account_authorizer
+      - POSTGRES_PASSWORD=account_authorizer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U account_authorizer -d account_authorizer" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   localstack:
     image: localstack/localstack:3.7.2
     hostname: localstack
@@ -23,6 +41,7 @@ services:
   message-generator:
     image: golang:1.24.3
     container_name: message-generator
+    profiles: [ "seed" ]
     depends_on:
       localstack:
         condition: service_healthy
@@ -52,3 +71,6 @@ services:
         go run message-generator.go
       "
     working_dir: /home
+
+volumes:
+  postgres-data:

@@ -11,7 +11,7 @@ import org.springframework.test.context.ActiveProfiles
 
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class AccountMovementAuthorizerApplicationTests {
+class AccountMovementAuthorizerApplicationTests : PostgreSqlIntegrationTest() {
 
     @LocalServerPort
     private var port: Int = 0
