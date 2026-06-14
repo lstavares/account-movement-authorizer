@@ -4,7 +4,7 @@ Aplicação de autorização de movimentações de conta, criada como base evolu
 
 ## Objetivo
 
-Esta aplicação será responsável por autorizar movimentações financeiras em contas bancárias, mantendo consistência de saldo e rastreabilidade das decisões. A Etapa 3 implementa o consumidor SQS de abertura de contas; endpoint de transações e regras de autorização ainda serão implementados em etapas futuras.
+Esta aplicação é responsável por autorizar movimentações financeiras em contas bancárias, mantendo consistência de saldo e rastreabilidade das decisões. A Etapa 3 implementa o consumidor SQS de abertura de contas; a Fase 4 implementa a API de autorização de transações.
 
 ## Stack inicial
 
@@ -93,6 +93,136 @@ A idempotência é feita por `accounts.id`. Se a conta já existir, o consumidor
 - Observabilidade começa com Actuator. Prometheus/Grafana ficam fora desta etapa.
 - O consumidor SQS de abertura de contas usa `accounts.id` como chave idempotente e trata duplicidade concorrente como conta já existente.
 - Payload inválido da fila é logado e mantido na fila nesta etapa; redrive/DLQ real é uma evolução futura.
+
+## API de autorização de transações
+
+Endpoint principal:
+
+```http
+POST /transactions/{transactionId}
+```
+
+O `transactionId` da URL é a chave idempotente da autorização e é persistido em `transactions.id`.
+
+Request:
+
+```json
+{
+  "account": {
+    "id": "5b19c8b6-0cc4-4c72-a989-0c2ee15fa975"
+  },
+  "transaction": {
+    "type": "CREDIT",
+    "amount": {
+      "value": 97.07,
+      "currency": "BRL"
+    }
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "transaction": {
+    "id": "8e8ae808-b154-48b5-9f3e-553935cc4543",
+    "type": "CREDIT",
+    "amount": {
+      "value": 97.07,
+      "currency": "BRL"
+    },
+    "status": "SUCCEEDED",
+    "timestamp": "2025-07-08T15:57:55-03:00"
+  },
+  "account": {
+    "id": "5b19c8b6-0cc4-4c72-a989-0c2ee15fa975",
+    "balance": {
+      "amount": 183.12,
+      "currency": "BRL"
+    }
+  }
+}
+```
+
+Exemplo de crédito:
+
+```bash
+curl -X POST http://localhost:8080/transactions/8e8ae808-b154-48b5-9f3e-553935cc4543 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account": { "id": "5b19c8b6-0cc4-4c72-a989-0c2ee15fa975" },
+    "transaction": {
+      "type": "CREDIT",
+      "amount": { "value": 97.07, "currency": "BRL" }
+    }
+  }'
+```
+
+Exemplo de débito:
+
+```bash
+curl -X POST http://localhost:8080/transactions/8ab03f98-35e3-4bc1-a534-c2a8377da675 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account": { "id": "5b19c8b6-0cc4-4c72-a989-0c2ee15fa975" },
+    "transaction": {
+      "type": "DEBIT",
+      "amount": { "value": 25.00, "currency": "BRL" }
+    }
+  }'
+```
+
+Exemplo de saldo insuficiente:
+
+```bash
+curl -X POST http://localhost:8080/transactions/4e58a845-e5c2-4a05-99e1-937762120080 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account": { "id": "5b19c8b6-0cc4-4c72-a989-0c2ee15fa975" },
+    "transaction": {
+      "type": "DEBIT",
+      "amount": { "value": 999999.99, "currency": "BRL" }
+    }
+  }'
+```
+
+Exemplo de conflito idempotente: envie novamente um `transactionId` já utilizado com qualquer alteração no payload, como trocar `CREDIT` por `DEBIT`; a API retorna `409 Conflict`.
+
+```bash
+curl -X POST http://localhost:8080/transactions/8e8ae808-b154-48b5-9f3e-553935cc4543 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account": { "id": "5b19c8b6-0cc4-4c72-a989-0c2ee15fa975" },
+    "transaction": {
+      "type": "DEBIT",
+      "amount": { "value": 97.07, "currency": "BRL" }
+    }
+  }'
+```
+
+Regras principais:
+
+- `CREDIT` soma o valor ao saldo atual.
+- `DEBIT` subtrai o valor do saldo atual quando há saldo suficiente.
+- `DEBIT` com saldo insuficiente retorna `transaction.status = FAILED`, persiste `failureReason = INSUFFICIENT_FUNDS` e não altera o saldo.
+- Conta inexistente retorna `transaction.status = FAILED`, persiste `failureReason = ACCOUNT_NOT_FOUND` e responde o envelope obrigatório com `account.balance.amount = 0.00`, pois não há saldo real para consultar.
+- Conta com status diferente de `ENABLED` retorna `transaction.status = FAILED`, persiste `failureReason = ACCOUNT_DISABLED` e não altera o saldo.
+- Apenas `BRL` é aceito nesta versão.
+- `amount.value` deve ser maior que zero e ter no máximo duas casas decimais.
+- Valores monetários são persistidos em centavos (`Long`) e expostos na API como decimal.
+
+Idempotência:
+
+- Reenvio do mesmo `transactionId` com payload idêntico retorna a transação já persistida sem reaplicar crédito ou débito.
+- Reenvio do mesmo `transactionId` com payload diferente retorna `409 Conflict`.
+- Corridas concorrentes com o mesmo `transactionId` são tratadas após rollback da tentativa duplicada, recarregando a transação vencedora.
+
+Concorrência:
+
+- Autorizações em conta existente usam `AccountRepository.findByIdForUpdate` com lock pessimista.
+- A alteração de saldo e a persistência da transação acontecem na mesma transação de banco.
+- Dois débitos simultâneos na mesma conta não aprovam usando o mesmo saldo anterior.
 
 ## Como executar
 
