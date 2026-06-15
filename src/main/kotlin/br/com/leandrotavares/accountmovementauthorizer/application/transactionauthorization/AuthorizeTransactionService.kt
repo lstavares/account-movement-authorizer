@@ -8,6 +8,10 @@ import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistenc
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.entity.TransactionEntity
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.repository.AccountRepository
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.repository.TransactionRepository
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.OperationalMetrics
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.TransactionAuthorizationFailureReason
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.TransactionAuthorizationOutcome
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.TransactionAuthorizationType
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Component
@@ -21,10 +25,72 @@ import java.time.temporal.ChronoUnit
 class AuthorizeTransactionService(
     private val transactionRepository: TransactionRepository,
     private val transactionAuthorizationWriter: TransactionAuthorizationWriter,
+    private val operationalMetrics: OperationalMetrics,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     fun authorize(command: AuthorizeTransactionCommand): AuthorizeTransactionResult {
+        val sample = operationalMetrics.startTimer()
+        val metricType = TransactionAuthorizationType.from(command.type)
+
+        try {
+            val result = authorizeWithIdempotency(command)
+            operationalMetrics.incrementTransactionAuthorization(result.type, result.status)
+            result.failureReason?.let { operationalMetrics.incrementFunctionalTransactionAuthorizationFailure(it) }
+
+            val durationMs = operationalMetrics.recordTransactionAuthorizationDuration(
+                sample,
+                metricType,
+                result.status.toMetricOutcome(),
+            )
+            logger.info(
+                "Transaction authorization observed. transactionId={} accountId={} type={} status={} failureReason={} durationMs={}",
+                result.transactionId,
+                result.accountId,
+                result.type,
+                result.status,
+                result.failureReason ?: "NONE",
+                durationMs,
+            )
+
+            return result
+        } catch (ex: IdempotencyConflictException) {
+            val durationMs = operationalMetrics.recordTransactionAuthorizationDuration(
+                sample,
+                metricType,
+                TransactionAuthorizationOutcome.IDEMPOTENCY_CONFLICT,
+            )
+            logger.info(
+                "Transaction authorization observed. transactionId={} accountId={} type={} status={} failureReason={} durationMs={}",
+                command.transactionId,
+                command.accountId,
+                command.type,
+                TransactionStatus.FAILED,
+                TransactionAuthorizationFailureReason.IDEMPOTENCY_CONFLICT.tag,
+                durationMs,
+            )
+            throw ex
+        } catch (ex: Exception) {
+            val durationMs = operationalMetrics.recordTransactionAuthorizationDuration(
+                sample,
+                metricType,
+                TransactionAuthorizationOutcome.ERROR,
+            )
+            logger.error(
+                "Transaction authorization failed unexpectedly. transactionId={} accountId={} type={} status={} failureReason={} durationMs={}",
+                command.transactionId,
+                command.accountId,
+                command.type,
+                TransactionStatus.FAILED,
+                "ERROR",
+                durationMs,
+                ex,
+            )
+            throw ex
+        }
+    }
+
+    private fun authorizeWithIdempotency(command: AuthorizeTransactionCommand): AuthorizeTransactionResult {
         transactionRepository.findById(command.transactionId).orElse(null)?.let { existingTransaction ->
             if (!existingTransaction.matches(command)) {
                 logger.info(
@@ -351,3 +417,9 @@ private fun TransactionEntity.toResult(
         accountBalanceAmount = accountBalanceAmount,
         accountBalanceCurrency = accountBalanceCurrency,
     )
+
+private fun TransactionStatus.toMetricOutcome(): TransactionAuthorizationOutcome =
+    when (this) {
+        TransactionStatus.SUCCEEDED -> TransactionAuthorizationOutcome.SUCCEEDED
+        TransactionStatus.FAILED -> TransactionAuthorizationOutcome.FAILED
+    }

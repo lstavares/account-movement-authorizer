@@ -2,6 +2,8 @@ package br.com.leandrotavares.accountmovementauthorizer.infrastructure.sqs
 
 import br.com.leandrotavares.accountmovementauthorizer.application.accountopening.RegisterOpenedAccountResult
 import br.com.leandrotavares.accountmovementauthorizer.application.accountopening.RegisterOpenedAccountService
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.AccountOpeningMessageResult
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.OperationalMetrics
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
@@ -23,6 +25,7 @@ class AccountOpeningSqsPoller(
     private val properties: AccountOpeningSqsProperties,
     private val parser: AccountOpeningMessageParser,
     private val registerOpenedAccountService: RegisterOpenedAccountService,
+    private val operationalMetrics: OperationalMetrics,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -51,12 +54,15 @@ class AccountOpeningSqsPoller(
             return
         }
 
+        operationalMetrics.incrementSqsPollMessagesReceived(messages.size)
+
         messages.forEach { message ->
             processMessage(message)
         }
     }
 
     private fun processMessage(message: Message) {
+        val sample = operationalMetrics.startTimer()
         val messageId = message.messageId() ?: "unknown"
         var accountId: UUID? = null
 
@@ -65,28 +71,46 @@ class AccountOpeningSqsPoller(
             accountId = command.accountId
 
             val result = registerOpenedAccountService.register(command)
+            val metricResult = result.toMetricResult()
+            operationalMetrics.incrementAccountOpeningMessage(metricResult)
+            val durationMs = operationalMetrics.recordAccountOpeningProcessingDuration(sample, metricResult)
             logger.info(
-                "Account opening message processed. messageId={} accountId={} result={} queueName={}",
+                "Account opening message processed. messageId={} accountId={} result={} queueName={} durationMs={}",
                 messageId,
                 accountId,
                 result,
                 properties.queueName,
+                durationMs,
             )
 
             deleteMessage(message, accountId, result)
         } catch (ex: InvalidAccountOpeningMessageException) {
+            operationalMetrics.incrementAccountOpeningMessage(AccountOpeningMessageResult.INVALID)
+            val durationMs = operationalMetrics.recordAccountOpeningProcessingDuration(
+                sample,
+                AccountOpeningMessageResult.INVALID,
+            )
             logger.error(
-                "Invalid account opening message. messageId={} queueName={}. Message will not be deleted.",
+                "Invalid account opening message. messageId={} result={} queueName={} durationMs={}. Message will not be deleted.",
                 messageId,
+                AccountOpeningMessageResult.INVALID.tag,
                 properties.queueName,
+                durationMs,
                 ex,
             )
         } catch (ex: Exception) {
+            operationalMetrics.incrementAccountOpeningMessage(AccountOpeningMessageResult.ERROR)
+            val durationMs = operationalMetrics.recordAccountOpeningProcessingDuration(
+                sample,
+                AccountOpeningMessageResult.ERROR,
+            )
             logger.error(
-                "Failed to process account opening message. messageId={} accountId={} queueName={}. Message will not be deleted.",
+                "Failed to process account opening message. messageId={} accountId={} result={} queueName={} durationMs={}. Message will not be deleted.",
                 messageId,
                 accountId,
+                AccountOpeningMessageResult.ERROR.tag,
                 properties.queueName,
+                durationMs,
                 ex,
             )
         }
@@ -135,3 +159,9 @@ class AccountOpeningSqsPoller(
         }
     }
 }
+
+private fun RegisterOpenedAccountResult.toMetricResult(): AccountOpeningMessageResult =
+    when (this) {
+        RegisterOpenedAccountResult.CREATED -> AccountOpeningMessageResult.CREATED
+        RegisterOpenedAccountResult.ALREADY_EXISTS -> AccountOpeningMessageResult.ALREADY_EXISTS
+    }

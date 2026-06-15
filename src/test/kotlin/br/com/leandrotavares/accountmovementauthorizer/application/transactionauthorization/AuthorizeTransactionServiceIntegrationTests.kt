@@ -5,9 +5,11 @@ import br.com.leandrotavares.accountmovementauthorizer.domain.AccountStatus
 import br.com.leandrotavares.accountmovementauthorizer.domain.FailureReason
 import br.com.leandrotavares.accountmovementauthorizer.domain.TransactionStatus
 import br.com.leandrotavares.accountmovementauthorizer.domain.TransactionType
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.OperationalMetrics
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.entity.AccountEntity
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.repository.AccountRepository
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.repository.TransactionRepository
+import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -33,6 +35,9 @@ class AuthorizeTransactionServiceIntegrationTests : PostgreSqlIntegrationTest() 
     @Autowired
     private lateinit var transactionRepository: TransactionRepository
 
+    @Autowired
+    private lateinit var meterRegistry: MeterRegistry
+
     @BeforeEach
     fun cleanDatabase() {
         transactionRepository.deleteAll()
@@ -47,6 +52,20 @@ class AuthorizeTransactionServiceIntegrationTests : PostgreSqlIntegrationTest() 
             type = TransactionType.CREDIT,
             amountValue = 97_07,
         )
+        val authorizationsBefore = counterValue(
+            OperationalMetrics.TRANSACTION_AUTHORIZATIONS,
+            "type",
+            "CREDIT",
+            "status",
+            "SUCCEEDED",
+        )
+        val durationBefore = timerCount(
+            OperationalMetrics.TRANSACTION_AUTHORIZATION_DURATION,
+            "type",
+            "CREDIT",
+            "outcome",
+            "SUCCEEDED",
+        )
 
         val result = authorizeTransactionService.authorize(command)
 
@@ -58,6 +77,24 @@ class AuthorizeTransactionServiceIntegrationTests : PostgreSqlIntegrationTest() 
         assertThat(persistedTransaction.status).isEqualTo(TransactionStatus.SUCCEEDED)
         assertThat(persistedTransaction.balanceBeforeAmount).isEqualTo(100_00)
         assertThat(persistedTransaction.balanceAfterAmount).isEqualTo(197_07)
+        assertThat(
+            counterValue(
+                OperationalMetrics.TRANSACTION_AUTHORIZATIONS,
+                "type",
+                "CREDIT",
+                "status",
+                "SUCCEEDED",
+            ),
+        ).isEqualTo(authorizationsBefore + 1)
+        assertThat(
+            timerCount(
+                OperationalMetrics.TRANSACTION_AUTHORIZATION_DURATION,
+                "type",
+                "CREDIT",
+                "outcome",
+                "SUCCEEDED",
+            ),
+        ).isEqualTo(durationBefore + 1)
     }
 
     @Test
@@ -89,6 +126,25 @@ class AuthorizeTransactionServiceIntegrationTests : PostgreSqlIntegrationTest() 
             type = TransactionType.DEBIT,
             amountValue = 10_01,
         )
+        val authorizationsBefore = counterValue(
+            OperationalMetrics.TRANSACTION_AUTHORIZATIONS,
+            "type",
+            "DEBIT",
+            "status",
+            "FAILED",
+        )
+        val failuresBefore = counterValue(
+            OperationalMetrics.TRANSACTION_AUTHORIZATION_FAILURES,
+            "reason",
+            "INSUFFICIENT_FUNDS",
+        )
+        val durationBefore = timerCount(
+            OperationalMetrics.TRANSACTION_AUTHORIZATION_DURATION,
+            "type",
+            "DEBIT",
+            "outcome",
+            "FAILED",
+        )
 
         val result = authorizeTransactionService.authorize(command)
 
@@ -102,6 +158,31 @@ class AuthorizeTransactionServiceIntegrationTests : PostgreSqlIntegrationTest() 
         assertThat(persistedTransaction.failureReason).isEqualTo(FailureReason.INSUFFICIENT_FUNDS)
         assertThat(persistedTransaction.balanceBeforeAmount).isEqualTo(10_00)
         assertThat(persistedTransaction.balanceAfterAmount).isEqualTo(10_00)
+        assertThat(
+            counterValue(
+                OperationalMetrics.TRANSACTION_AUTHORIZATIONS,
+                "type",
+                "DEBIT",
+                "status",
+                "FAILED",
+            ),
+        ).isEqualTo(authorizationsBefore + 1)
+        assertThat(
+            counterValue(
+                OperationalMetrics.TRANSACTION_AUTHORIZATION_FAILURES,
+                "reason",
+                "INSUFFICIENT_FUNDS",
+            ),
+        ).isEqualTo(failuresBefore + 1)
+        assertThat(
+            timerCount(
+                OperationalMetrics.TRANSACTION_AUTHORIZATION_DURATION,
+                "type",
+                "DEBIT",
+                "outcome",
+                "FAILED",
+            ),
+        ).isEqualTo(durationBefore + 1)
     }
 
     @Test
@@ -277,4 +358,16 @@ class AuthorizeTransactionServiceIntegrationTests : PostgreSqlIntegrationTest() 
             createdAt = OffsetDateTime.now(),
             updatedAt = OffsetDateTime.now(),
         )
+
+    private fun counterValue(
+        name: String,
+        vararg tags: String,
+    ): Double =
+        meterRegistry.find(name).tags(*tags).counter()?.count() ?: 0.0
+
+    private fun timerCount(
+        name: String,
+        vararg tags: String,
+    ): Long =
+        meterRegistry.find(name).tags(*tags).timer()?.count() ?: 0
 }
