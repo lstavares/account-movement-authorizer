@@ -2,10 +2,12 @@ package br.com.leandrotavares.accountmovementauthorizer.infrastructure.web
 
 import br.com.leandrotavares.accountmovementauthorizer.PostgreSqlIntegrationTest
 import br.com.leandrotavares.accountmovementauthorizer.domain.AccountStatus
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.OperationalMetrics
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.entity.AccountEntity
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.repository.AccountRepository
 import br.com.leandrotavares.accountmovementauthorizer.infrastructure.persistence.repository.TransactionRepository
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -38,6 +40,9 @@ class TransactionAuthorizationControllerIntegrationTests : PostgreSqlIntegration
 
     @Autowired
     private lateinit var transactionRepository: TransactionRepository
+
+    @Autowired
+    private lateinit var meterRegistry: MeterRegistry
 
     @BeforeEach
     fun cleanDatabase() {
@@ -99,6 +104,11 @@ class TransactionAuthorizationControllerIntegrationTests : PostgreSqlIntegration
     fun `deve retornar 409 para conflito de idempotencia`() {
         val account = accountRepository.saveAndFlush(newAccount(balanceAmount = 100_00))
         val transactionId = UUID.randomUUID()
+        val failuresBefore = counterValue(
+            OperationalMetrics.TRANSACTION_AUTHORIZATION_FAILURES,
+            "reason",
+            "IDEMPOTENCY_CONFLICT",
+        )
 
         val firstResponse = postTransaction(
             transactionId = transactionId,
@@ -112,11 +122,30 @@ class TransactionAuthorizationControllerIntegrationTests : PostgreSqlIntegration
         assertThat(firstResponse.statusCode).isEqualTo(HttpStatus.OK)
         assertThat(conflictingResponse.statusCode).isEqualTo(HttpStatus.CONFLICT)
         assertThat(accountRepository.findById(account.id).orElseThrow().balanceAmount).isEqualTo(125_00)
+        assertThat(
+            counterValue(
+                OperationalMetrics.TRANSACTION_AUTHORIZATION_FAILURES,
+                "reason",
+                "IDEMPOTENCY_CONFLICT",
+            ),
+        ).isEqualTo(failuresBefore + 1)
     }
 
     @Test
     fun `deve retornar 400 para moeda invalida`() {
         val account = accountRepository.saveAndFlush(newAccount())
+        val failuresBefore = counterValue(
+            OperationalMetrics.TRANSACTION_AUTHORIZATION_FAILURES,
+            "reason",
+            "VALIDATION_ERROR",
+        )
+        val durationBefore = timerCount(
+            OperationalMetrics.TRANSACTION_AUTHORIZATION_DURATION,
+            "type",
+            "UNKNOWN",
+            "outcome",
+            "VALIDATION_ERROR",
+        )
 
         val response = postTransaction(
             transactionId = UUID.randomUUID(),
@@ -124,6 +153,22 @@ class TransactionAuthorizationControllerIntegrationTests : PostgreSqlIntegration
         )
 
         assertThat(response.statusCode).isEqualTo(HttpStatus.BAD_REQUEST)
+        assertThat(
+            counterValue(
+                OperationalMetrics.TRANSACTION_AUTHORIZATION_FAILURES,
+                "reason",
+                "VALIDATION_ERROR",
+            ),
+        ).isEqualTo(failuresBefore + 1)
+        assertThat(
+            timerCount(
+                OperationalMetrics.TRANSACTION_AUTHORIZATION_DURATION,
+                "type",
+                "UNKNOWN",
+                "outcome",
+                "VALIDATION_ERROR",
+            ),
+        ).isEqualTo(durationBefore + 1)
     }
 
     @ParameterizedTest
@@ -224,4 +269,16 @@ class TransactionAuthorizationControllerIntegrationTests : PostgreSqlIntegration
             createdAt = OffsetDateTime.now(),
             updatedAt = OffsetDateTime.now(),
         )
+
+    private fun counterValue(
+        name: String,
+        vararg tags: String,
+    ): Double =
+        meterRegistry.find(name).tags(*tags).counter()?.count() ?: 0.0
+
+    private fun timerCount(
+        name: String,
+        vararg tags: String,
+    ): Long =
+        meterRegistry.find(name).tags(*tags).timer()?.count() ?: 0
 }

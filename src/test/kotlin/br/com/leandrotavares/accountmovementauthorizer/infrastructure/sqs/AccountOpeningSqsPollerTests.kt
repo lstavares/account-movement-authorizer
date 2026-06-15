@@ -4,9 +4,12 @@ import br.com.leandrotavares.accountmovementauthorizer.application.accountopenin
 import br.com.leandrotavares.accountmovementauthorizer.application.accountopening.RegisterOpenedAccountResult
 import br.com.leandrotavares.accountmovementauthorizer.application.accountopening.RegisterOpenedAccountService
 import br.com.leandrotavares.accountmovementauthorizer.domain.AccountStatus
+import br.com.leandrotavares.accountmovementauthorizer.infrastructure.observability.OperationalMetrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import software.amazon.awssdk.services.sqs.SqsClient
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest
@@ -22,6 +25,8 @@ class AccountOpeningSqsPollerTests {
     private val sqsClient = mockk<SqsClient>()
     private val parser = mockk<AccountOpeningMessageParser>()
     private val registerOpenedAccountService = mockk<RegisterOpenedAccountService>()
+    private val meterRegistry = SimpleMeterRegistry()
+    private val operationalMetrics = OperationalMetrics(meterRegistry)
     private val properties = AccountOpeningSqsProperties(
         enabled = true,
         queueUrl = "http://localhost:4566/000000000000/conta-bancaria-criada",
@@ -33,12 +38,16 @@ class AccountOpeningSqsPollerTests {
         properties = properties,
         parser = parser,
         registerOpenedAccountService = registerOpenedAccountService,
+        operationalMetrics = operationalMetrics,
     )
 
     @Test
     fun `deve deletar mensagem apos cadastro com sucesso`() {
         val message = newMessage(body = "body-1", receiptHandle = "receipt-1")
         val command = newCommand()
+        val receivedBefore = counterValue(OperationalMetrics.SQS_POLL_MESSAGES_RECEIVED)
+        val createdBefore = counterValue(OperationalMetrics.ACCOUNT_OPENING_MESSAGES, "result", "created")
+        val durationBefore = timerCount(OperationalMetrics.ACCOUNT_OPENING_PROCESSING_DURATION, "result", "created")
 
         stubReceive(message)
         every { parser.parse("body-1") } returns command
@@ -54,12 +63,22 @@ class AccountOpeningSqsPollerTests {
                 },
             )
         }
+        assertThat(counterValue(OperationalMetrics.SQS_POLL_MESSAGES_RECEIVED)).isEqualTo(receivedBefore + 1)
+        assertThat(counterValue(OperationalMetrics.ACCOUNT_OPENING_MESSAGES, "result", "created"))
+            .isEqualTo(createdBefore + 1)
+        assertThat(timerCount(OperationalMetrics.ACCOUNT_OPENING_PROCESSING_DURATION, "result", "created"))
+            .isEqualTo(durationBefore + 1)
     }
 
     @Test
     fun `deve deletar mensagem apos duplicidade idempotente`() {
         val message = newMessage(body = "body-1", receiptHandle = "receipt-1")
         val command = newCommand()
+        val alreadyExistsBefore = counterValue(
+            OperationalMetrics.ACCOUNT_OPENING_MESSAGES,
+            "result",
+            "already_exists",
+        )
 
         stubReceive(message)
         every { parser.parse("body-1") } returns command
@@ -75,12 +94,20 @@ class AccountOpeningSqsPollerTests {
                 },
             )
         }
+        assertThat(
+            counterValue(
+                OperationalMetrics.ACCOUNT_OPENING_MESSAGES,
+                "result",
+                "already_exists",
+            ),
+        ).isEqualTo(alreadyExistsBefore + 1)
     }
 
     @Test
     fun `nao deve deletar mensagem quando servico falhar`() {
         val message = newMessage(body = "body-1", receiptHandle = "receipt-1")
         val command = newCommand()
+        val errorBefore = counterValue(OperationalMetrics.ACCOUNT_OPENING_MESSAGES, "result", "error")
 
         stubReceive(message)
         every { parser.parse("body-1") } returns command
@@ -89,11 +116,14 @@ class AccountOpeningSqsPollerTests {
         poller.pollOnce()
 
         verify(exactly = 0) { sqsClient.deleteMessage(any<DeleteMessageRequest>()) }
+        assertThat(counterValue(OperationalMetrics.ACCOUNT_OPENING_MESSAGES, "result", "error"))
+            .isEqualTo(errorBefore + 1)
     }
 
     @Test
     fun `nao deve deletar mensagem com payload invalido`() {
         val message = newMessage(body = "bad-body", receiptHandle = "receipt-1")
+        val invalidBefore = counterValue(OperationalMetrics.ACCOUNT_OPENING_MESSAGES, "result", "invalid")
 
         stubReceive(message)
         every { parser.parse("bad-body") } throws InvalidAccountOpeningMessageException(
@@ -104,6 +134,8 @@ class AccountOpeningSqsPollerTests {
         poller.pollOnce()
 
         verify(exactly = 0) { sqsClient.deleteMessage(any<DeleteMessageRequest>()) }
+        assertThat(counterValue(OperationalMetrics.ACCOUNT_OPENING_MESSAGES, "result", "invalid"))
+            .isEqualTo(invalidBefore + 1)
     }
 
     @Test
@@ -163,4 +195,16 @@ class AccountOpeningSqsPollerTests {
             .body(body)
             .receiptHandle(receiptHandle)
             .build()
+
+    private fun counterValue(
+        name: String,
+        vararg tags: String,
+    ): Double =
+        meterRegistry.find(name).tags(*tags).counter()?.count() ?: 0.0
+
+    private fun timerCount(
+        name: String,
+        vararg tags: String,
+    ): Long =
+        meterRegistry.find(name).tags(*tags).timer()?.count() ?: 0
 }

@@ -206,6 +206,8 @@ Endpoints expostos:
 
 Endpoints sensiveis como `env`, `beans`, `heapdump` e `threaddump` nao sao expostos.
 
+Metricas customizadas, exemplos de Prometheus e smoke/load local leve estao em [docs/operational-insights.md](docs/operational-insights.md).
+
 ## Regras principais
 
 - `CREDIT` soma o valor ao saldo atual.
