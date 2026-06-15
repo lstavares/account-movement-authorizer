@@ -208,6 +208,8 @@ Endpoints sensiveis como `env`, `beans`, `heapdump` e `threaddump` nao sao expos
 
 Metricas customizadas, exemplos de Prometheus e smoke/load local leve estao em [docs/operational-insights.md](docs/operational-insights.md).
 
+Dashboard opcional com Prometheus/Grafana: veja [docs/observability-dashboard.md](docs/observability-dashboard.md).
+
 ## Regras principais
 
 - `CREDIT` soma o valor ao saldo atual.
