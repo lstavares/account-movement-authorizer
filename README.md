@@ -210,6 +210,8 @@ Metricas customizadas, exemplos de Prometheus e smoke/load local leve estao em [
 
 Dashboard opcional com Prometheus/Grafana: veja [docs/observability-dashboard.md](docs/observability-dashboard.md).
 
+Validacao E2E/smoke automatizada: veja [docs/e2e-smoke-validation.md](docs/e2e-smoke-validation.md).
+
 ## Regras principais
 
 - `CREDIT` soma o valor ao saldo atual.
