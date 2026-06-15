@@ -5,7 +5,7 @@
 # 1. Start infrastructure and app.
 # 2. Run: docker compose --profile seed up message-generator
 # 3. Pick an account id from PostgreSQL:
-#    docker exec -it account-authorizer-postgres psql -U account_authorizer -d account_authorizer -c "select id, balance_amount, status from accounts limit 5;"
+#    docker compose exec -T postgres psql -U account_authorizer -d account_authorizer -c "select id, balance_amount, balance_currency, status from accounts limit 5;"
 @accountId = 00000000-0000-0000-0000-000000000001
 
 ### Healthcheck
