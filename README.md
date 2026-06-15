@@ -98,7 +98,7 @@ PowerShell:
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE = "local"
-./gradlew bootRun
+.\gradlew.bat bootRun
 ```
 
 Fora do container, o profile `local` usa:
@@ -141,7 +141,7 @@ Dentro da rede Docker, a aplicacao usa:
 Depois de popular a fila, pegue uma conta persistida:
 
 ```bash
-docker exec -it account-authorizer-postgres psql -U account_authorizer -d account_authorizer -c "select id, balance_amount, balance_currency, status from accounts limit 5;"
+docker compose exec -T postgres psql -U account_authorizer -d account_authorizer -c "select id, balance_amount, balance_currency, status from accounts limit 5;"
 ```
 
 Exemplo de credito:
@@ -179,13 +179,13 @@ Ha uma colecao de exemplos em [docs/requests/account-movement-authorizer.http](d
 Contas:
 
 ```bash
-docker exec -it account-authorizer-postgres psql -U account_authorizer -d account_authorizer -c "select id, owner_id, status, balance_amount, balance_currency from accounts limit 10;"
+docker compose exec -T postgres psql -U account_authorizer -d account_authorizer -c "select id, owner_id, status, balance_amount, balance_currency from accounts limit 10;"
 ```
 
 Transacoes:
 
 ```bash
-docker exec -it account-authorizer-postgres psql -U account_authorizer -d account_authorizer -c "select id, account_id, type, amount_value, status, failure_reason from transactions order by created_at desc limit 10;"
+docker compose exec -T postgres psql -U account_authorizer -d account_authorizer -c "select id, account_id, type, amount_value, amount_currency, status, failure_reason, balance_before_amount, balance_after_amount from transactions order by requested_at desc limit 10;"
 ```
 
 ## Swagger e OpenAPI
@@ -242,6 +242,7 @@ Outras decisoes:
 - LocalStack aumenta fidelidade local sem depender de AWS real, mas nao substitui validacao em ambiente cloud.
 - Logs estruturados JSON nao foram adicionados para evitar stack extra nesta entrega.
 - Prometheus foi adicionado como dependencia pequena para expor metricas em formato amplamente suportado.
+- Valores monetarios usam `Long` em centavos; limites de valor maximo por produto seriam uma evolucao para producao.
 
 ## Pipeline e deploy
 
