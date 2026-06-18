@@ -4,12 +4,12 @@ Status: Aceito
 
 ## Contexto
 
-O sistema precisa expor uma API HTTP, consumir SQS, persistir saldos e transacoes com consistencia e ser simples de executar localmente.
+O sistema precisa expor uma API HTTP, consumir SQS, persistir saldos e transações com consistência e ser simples de executar localmente.
 
-## Decisao
+## Decisão
 
 Usar Kotlin com Spring Boot 3, Spring Web, Spring Data JPA, Flyway e PostgreSQL.
 
-## Consequencias
+## Consequências
 
-A stack entrega produtividade, suporte maduro a transacoes e boa integracao com observabilidade. O custo e carregar o ecossistema Spring/JPA, maior que uma solucao minimalista.
+A stack entrega produtividade, suporte maduro a transações e boa integração com observabilidade. O custo é carregar o ecossistema Spring/JPA, maior que uma solução minimalista.

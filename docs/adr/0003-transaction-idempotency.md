@@ -1,15 +1,15 @@
-# ADR 0003 - Idempotencia por transactionId
+# ADR 0003 - Idempotência por transactionId
 
 Status: Aceito
 
 ## Contexto
 
-Clientes podem reenviar a mesma autorizacao por timeout, retry ou falha de rede.
+Clientes podem reenviar a mesma autorização por timeout, retry ou falha de rede.
 
-## Decisao
+## Decisão
 
-Usar o `transactionId` da URL como chave idempotente e persisti-lo como identificador da transacao.
+Usar o `transactionId` da URL como chave idempotente e persisti-lo como identificador da transação.
 
-## Consequencias
+## Consequências
 
-Reenvios com o mesmo payload retornam o resultado ja registrado sem reaplicar credito ou debito. Reenvios com payload diferente retornam conflito.
+Reenvios com o mesmo payload retornam o resultado já registrado sem reaplicar crédito ou débito. Reenvios com payload diferente retornam conflito.

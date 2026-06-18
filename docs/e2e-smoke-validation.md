@@ -1,17 +1,17 @@
-# E2E Smoke Validation
+# Validação E2E Smoke
 
-Esta fase adiciona uma validacao ponta a ponta executavel para demonstrar que o fluxo principal funciona fora dos testes unitarios e integrados. Ela usa Docker Compose, LocalStack/SQS, HTTP, PostgreSQL e metricas Prometheus expostas pela propria aplicacao.
+Esta fase adiciona uma validação ponta a ponta executável para demonstrar que o fluxo principal funciona fora dos testes unitários e integrados. Ela usa Docker Compose, LocalStack/SQS, HTTP, PostgreSQL e métricas Prometheus expostas pela própria aplicação.
 
-Ela nao altera regra de negocio, contrato HTTP, schema, migrations, idempotencia, locking, consumidor SQS ou dashboard Grafana.
+Ela não altera regra de negócio, contrato HTTP, schema, migrations, idempotência, locking, consumidor SQS ou dashboard Grafana.
 
-## Onde esta validacao se encaixa
+## Onde a validação se encaixa
 
-- `./gradlew clean test`: executa testes unitarios e integrados automatizados, incluindo Testcontainers.
-- `scripts/smoke-load-transactions.sh`: gera trafego HTTP simples e concorrente contra uma conta existente; util para alimentar metricas, mas nao valida todos os cenarios.
-- `scripts/e2e-transaction-scenarios.sh`: valida uma trilha funcional fechada com SQS, API, banco e metricas, falhando com exit code diferente de zero quando algo diverge.
-- Grafana dashboard: visualiza metricas depois que ha trafego, mas nao e requisito do script E2E.
+- `./gradlew clean test`: executa testes unitários e integrados automatizados, incluindo Testcontainers.
+- `scripts/smoke-load-transactions.sh`: gera tráfego HTTP simples e concorrente contra uma conta existente; útil para alimentar métricas, mas não valida todos os cenários.
+- `scripts/e2e-transaction-scenarios.sh`: valida uma trilha funcional fechada com SQS, API, banco e métricas, falhando com exit code diferente de zero quando algo diverge.
+- Grafana dashboard: visualiza métricas depois que há tráfego, mas não é requisito do script E2E.
 
-## Como rodar com stack ja em execucao
+## Como rodar com stack já em execução
 
 Suba a stack e popule a fila como no fluxo local normal. Depois rode:
 
@@ -19,7 +19,7 @@ Suba a stack e popule a fila como no fluxo local normal. Depois rode:
 bash scripts/e2e-transaction-scenarios.sh
 ```
 
-O script assume `http://localhost:8080`, valida o app, PostgreSQL via container e o endpoint Prometheus da aplicacao, pega uma conta `ENABLED` existente e executa os cenarios.
+O script assume `http://localhost:8080`, valida o app, PostgreSQL via container e o endpoint Prometheus da aplicação, pega uma conta `ENABLED` existente e executa os cenários.
 
 Para usar outra URL:
 
@@ -39,7 +39,7 @@ Esse modo executa:
 - `docker compose up -d postgres localstack app`
 - `docker compose --profile seed run --rm -e TOTAL_ACCOUNTS=25 message-generator`
 
-Depois aguarda `/actuator/health`, aguarda pelo menos uma conta persistida e executa os cenarios.
+Depois aguarda `/actuator/health`, aguarda pelo menos uma conta persistida e executa os cenários.
 
 ## Como rodar limpando tudo antes
 
@@ -47,24 +47,24 @@ Depois aguarda `/actuator/health`, aguarda pelo menos uma conta persistida e exe
 bash scripts/e2e-transaction-scenarios.sh --start-stack --clean
 ```
 
-Use este modo em CI ou quando quiser uma demonstracao do zero. Ele executa `docker compose down -v --remove-orphans` antes de subir a stack, portanto remove dados locais do volume PostgreSQL.
+Use este modo em CI ou quando quiser uma demonstração do zero. Ele executa `docker compose down -v --remove-orphans` antes de subir a stack, portanto remove dados locais do volume PostgreSQL.
 
-## Cenarios validados
+## Cenários validados
 
-O script cria `transactionId`s proprios e usa o PostgreSQL como fonte da verdade para saldo, status, `failure_reason`, `balance_before_amount`, `balance_after_amount` e contagem por ID.
+O script cria `transactionId`s próprios e usa o PostgreSQL como fonte da verdade para saldo, status, `failure_reason`, `balance_before_amount`, `balance_after_amount` e contagem por ID.
 
 Ele valida:
 
-- `CREDIT 100.00 BRL` com HTTP `200`, resposta `SUCCEEDED`, transacao `SUCCEEDED`, `amount_value = 10000` e saldo aumentado.
-- `DEBIT 30.00 BRL` com HTTP `200`, resposta `SUCCEEDED`, transacao `SUCCEEDED` e saldo reduzido.
+- `CREDIT 100.00 BRL` com HTTP `200`, resposta `SUCCEEDED`, transação `SUCCEEDED`, `amount_value = 10000` e saldo aumentado.
+- `DEBIT 30.00 BRL` com HTTP `200`, resposta `SUCCEEDED`, transação `SUCCEEDED` e saldo reduzido.
 - `DEBIT` maior que o saldo atual com HTTP `200`, resposta `FAILED`, `failure_reason = INSUFFICIENT_FUNDS` e saldo inalterado.
 - `CREDIT 50.00 BRL` para conta inexistente com HTTP `200`, resposta `FAILED` e `failure_reason = ACCOUNT_NOT_FOUND`.
-- Reenvio do primeiro `CREDIT` com payload identico, HTTP `200`, saldo inalterado e uma unica transacao com o ID.
-- Reenvio do primeiro `CREDIT` com valor diferente, HTTP `409`, saldo inalterado e uma unica transacao com o ID.
-- `currency = USD` com HTTP `400` e nenhuma transacao persistida.
-- `amount.value = 0` com HTTP `400` e nenhuma transacao persistida.
+- Reenvio do primeiro `CREDIT` com payload idêntico, HTTP `200`, saldo inalterado e uma única transação com o ID.
+- Reenvio do primeiro `CREDIT` com valor diferente, HTTP `409`, saldo inalterado e uma única transação com o ID.
+- `currency = USD` com HTTP `400` e nenhuma transação persistida.
+- `amount.value = 0` com HTTP `400` e nenhuma transação persistida.
 
-Ao final, consulta `GET /actuator/prometheus` e valida a presenca das series:
+Ao final, consulta `GET /actuator/prometheus` e valida a presença das séries:
 
 - `transaction_authorizations_total`
 - `transaction_authorization_failures_total`
@@ -74,7 +74,7 @@ Ao final, consulta `GET /actuator/prometheus` e valida a presenca das series:
 
 ## GitHub Actions manual
 
-O workflow manual esta em `.github/workflows/e2e-smoke.yml` e roda somente via `workflow_dispatch`.
+O workflow manual está em `.github/workflows/e2e-smoke.yml` e roda somente via `workflow_dispatch`.
 
 Ele executa:
 
@@ -86,11 +86,11 @@ bash scripts/e2e-transaction-scenarios.sh --start-stack --clean
 
 Em caso de falha, imprime `docker compose ps -a` e logs de `app`, `postgres`, `localstack` e `message-generator`. Ao final, sempre executa `docker compose down --remove-orphans -v`.
 
-O workflow nao usa secrets, nao publica imagem, nao faz deploy, nao exige Grafana e nao expoe porta publica.
+O workflow não usa secrets, não publica imagem, não faz deploy, não exige Grafana e não expõe porta pública.
 
-## Uso em apresentacao tecnica
+## Uso em apresentação técnica
 
-Uma receita curta para demonstracao:
+Uma receita curta para demonstração:
 
 ```bash
 bash scripts/e2e-transaction-scenarios.sh --start-stack --clean
@@ -103,11 +103,11 @@ Depois acesse:
 - Grafana: `http://localhost:3000`
 - Prometheus: `http://localhost:9090`
 
-O script imprime a conta usada, saldo inicial/final, cenarios validados e series de metricas encontradas. O Grafana pode ser aberto depois para visualizar o efeito do trafego.
+O script imprime a conta usada, saldo inicial/final, cenários validados e séries de métricas encontradas. O Grafana pode ser aberto depois para visualizar o efeito do tráfego.
 
 ## GitHub Codespaces
 
-Codespaces pode ser usado para demonstracao temporaria, mas o repositorio nao deve commitar URL fixa.
+Codespaces pode ser usado para demonstração temporária, mas o repositório não deve commitar URL fixa.
 
 Use as URLs da aba `PORTS`, por exemplo:
 
@@ -120,13 +120,13 @@ Para o script E2E, rode de dentro do terminal do Codespace usando a URL local:
 bash scripts/e2e-transaction-scenarios.sh --start-stack --clean --base-url http://localhost:8080
 ```
 
-Se tornar portas publicas para demonstracao, reverta depois.
+Se tornar portas públicas para demonstração, reverta depois.
 
-## Limitacoes
+## Limitações
 
-- Nao e benchmark e nao mede capacidade real de producao.
-- Altera a base local ao criar transacoes e atualizar saldo.
+- Não é benchmark e não mede capacidade real de produção.
+- Altera a base local ao criar transações e atualizar saldo.
 - `--clean` remove volumes locais do Docker Compose.
-- Usa LocalStack, nao AWS real.
-- Depende de Docker e de rede para build/seed quando a imagem ainda nao esta cacheada.
-- Nao substitui testes formais de performance, carga ou resiliencia.
+- Usa LocalStack, não AWS real.
+- Depende de Docker e de rede para build/seed quando a imagem ainda não está cacheada.
+- Não substitui testes formais de performance, carga ou resiliência.

@@ -1,15 +1,15 @@
-# ADR 0002 - Valores monetarios em centavos
+# ADR 0002 - Valores monetários em centavos
 
 Status: Aceito
 
 ## Contexto
 
-Autorizacao financeira nao deve depender de ponto flutuante para calcular saldo.
+Autorização financeira não deve depender de ponto flutuante para calcular saldo.
 
-## Decisao
+## Decisão
 
-Persistir valores monetarios como `Long` em centavos e expor valores decimais apenas na API.
+Persistir valores monetários como `Long` em centavos e expor valores decimais apenas na API.
 
-## Consequencias
+## Consequências
 
-A decisao evita erros de arredondamento e simplifica comparacoes. A aplicacao precisa validar escala maxima de duas casas decimais antes da conversao.
+A decisão evita erros de arredondamento e simplifica comparações. A aplicação precisa validar escala máxima de duas casas decimais antes da conversão.
