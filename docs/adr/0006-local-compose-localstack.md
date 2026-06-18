@@ -4,12 +4,12 @@ Status: Aceito
 
 ## Contexto
 
-O avaliador precisa executar banco, SQS local e aplicacao sem depender de recursos AWS reais.
+O avaliador precisa executar banco, SQS local e aplicação sem depender de recursos AWS reais.
 
-## Decisao
+## Decisão
 
-Usar Docker Compose com PostgreSQL, LocalStack, aplicacao containerizada e `message-generator` em profile `seed`.
+Usar Docker Compose com PostgreSQL, LocalStack, aplicação containerizada e `message-generator` em profile `seed`.
 
-## Consequencias
+## Consequências
 
-O ambiente local fica reproduzivel e isolado. LocalStack cobre o fluxo de desenvolvimento, mas nao substitui testes em uma conta cloud real antes de producao.
+O ambiente local fica reproduzível e isolado. LocalStack cobre o fluxo de desenvolvimento, mas não substitui testes em uma conta cloud real antes de produção.

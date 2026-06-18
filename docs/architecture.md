@@ -25,11 +25,11 @@ sequenceDiagram
     SQS-->>App: mensagem com account.id
     App->>App: valida e converte payload
     App->>DB: insere conta com saldo inicial zero
-    DB-->>App: CREATED ou ja existente
-    App->>SQS: deleteMessage em sucesso/idempotencia
+    DB-->>App: CREATED ou já existente
+    App->>SQS: deleteMessage em sucesso/idempotência
 ```
 
-## Fluxo de autorizacao de transacao
+## Fluxo de autorização de transação
 
 ```mermaid
 sequenceDiagram
@@ -41,30 +41,30 @@ sequenceDiagram
     Client->>API: POST /transactions/{transactionId}
     API->>Service: command validado
     Service->>DB: consulta transactionId
-    alt transacao ja existe com mesmo payload
-        DB-->>Service: transacao existente
+    alt transação já existe com mesmo payload
+        DB-->>Service: transação existente
         Service-->>API: resultado idempotente
-    else nova transacao
+    else nova transação
         Service->>DB: lock pessimista da conta
         alt CREDIT ou DEBIT autorizado
             Service->>DB: atualiza saldo e registra SUCCEEDED
         else falha funcional
-            Service->>DB: registra FAILED sem alterar saldo quando aplicavel
+            Service->>DB: registra FAILED sem alterar saldo quando aplicável
         end
         Service-->>API: envelope de resposta
     end
     API-->>Client: 200, 400 ou 409
 ```
 
-## Proposta de arquitetura cloud publica
+## Proposta de arquitetura cloud pública
 
 ```mermaid
 flowchart LR
     clients["Clientes"] --> edge["API Gateway ou Load Balancer"]
-    edge --> service["Servico containerizado<br/>ECS / EKS / App Runner"]
+    edge --> service["Serviço containerizado<br/>ECS / EKS / App Runner"]
     service --> rds["PostgreSQL gerenciado<br/>RDS"]
     sqs["SQS<br/>conta-bancaria-criada"] --> service
-    service --> cw["CloudWatch<br/>logs, metricas e alarmes"]
+    service --> cw["CloudWatch<br/>logs, métricas e alarmes"]
     secrets["Secrets Manager / Parameter Store"] --> service
     registry["Container Registry"] --> service
     pipeline["CI/CD"] --> registry
@@ -72,14 +72,14 @@ flowchart LR
     deploy --> service
 ```
 
-## Observabilidade e operacao
+## Observabilidade e operação
 
 - Logs em formato simples key-value para permitir busca por `transactionId`, `accountId`, `messageId`, `status` e `failureReason`.
 - Actuator exposto somente com endpoints operacionais seguros: health, info, metrics e prometheus.
-- Metricas Prometheus podem ser coletadas por Prometheus gerenciado, agente OpenTelemetry ou CloudWatch Agent, conforme a plataforma escolhida.
+- Métricas Prometheus podem ser coletadas por Prometheus gerenciado, agente OpenTelemetry ou CloudWatch Agent, conforme a plataforma escolhida.
 
 ## Escalabilidade
 
-- A API pode escalar horizontalmente porque a consistencia de saldo depende do lock transacional no PostgreSQL.
-- O consumidor SQS pode escalar horizontalmente, desde que a idempotencia por `accounts.id` seja mantida.
-- Contas muito quentes podem gerar contencao no banco; particionamento funcional ou filas por chave seriam proximos passos se esse gargalo aparecer.
+- A API pode escalar horizontalmente porque a consistência de saldo depende do lock transacional no PostgreSQL.
+- O consumidor SQS pode escalar horizontalmente, desde que a idempotência por `accounts.id` seja mantida.
+- Contas muito quentes podem gerar contenção no banco; particionamento funcional ou filas por chave seriam próximos passos se esse gargalo aparecer.

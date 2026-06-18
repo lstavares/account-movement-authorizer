@@ -4,12 +4,12 @@ Status: Aceito
 
 ## Contexto
 
-Transacoes concorrentes na mesma conta podem disputar o mesmo saldo disponivel.
+Transações concorrentes na mesma conta podem disputar o mesmo saldo disponível.
 
-## Decisao
+## Decisão
 
-Buscar a conta com lock pessimista durante a autorizacao e persistir saldo e transacao na mesma transacao de banco.
+Buscar a conta com lock pessimista durante a autorização e persistir saldo e transação na mesma transação de banco.
 
-## Consequencias
+## Consequências
 
-A solucao privilegia consistencia financeira e simplicidade. Em alta concorrencia na mesma conta, a vazao pode ser limitada pela serializacao dos acessos.
+A solução privilegia consistência financeira e simplicidade. Em alta concorrência na mesma conta, a vazão pode ser limitada pela serialização dos acessos.

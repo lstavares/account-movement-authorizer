@@ -1,4 +1,4 @@
-# ADR 0005 - SQS standard e idempotencia na abertura de contas
+# ADR 0005 - SQS standard e idempotência na abertura de contas
 
 Status: Aceito
 
@@ -6,10 +6,10 @@ Status: Aceito
 
 Mensagens de abertura de conta podem ser entregues mais de uma vez em filas standard.
 
-## Decisao
+## Decisão
 
 Consumir a fila standard e usar `accounts.id` como chave idempotente para abertura de contas.
 
-## Consequencias
+## Consequências
 
-A aplicacao tolera duplicidade sem criar contas repetidas. Ordenacao estrita e DLQ real ficam como evolucoes de infraestrutura.
+A aplicação tolera duplicidade sem criar contas repetidas. Ordenação estrita e DLQ real ficam como evoluções de infraestrutura.
